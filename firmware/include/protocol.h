@@ -8,6 +8,9 @@
 #define GOGEN_STATE_UUID  "a8f30002-4c1e-4b8e-9a52-6f6f67656e32"  // READ | NOTIFY
 #define GOGEN_CMD_UUID    "a8f30003-4c1e-4b8e-9a52-6f6f67656e32"  // WRITE
 #define GOGEN_CFG_UUID    "a8f30004-4c1e-4b8e-9a52-6f6f67656e32"  // READ
+#define GOGEN_TELEM_UUID  "a8f30005-4c1e-4b8e-9a52-6f6f67656e32"  // NOTIFY      (v3)
+#define GOGEN_RIDE_UUID   "a8f30006-4c1e-4b8e-9a52-6f6f67656e32"  // READ        (v3, zatím neimplementováno)
+#define GOGEN_CHARGE_UUID "a8f30007-4c1e-4b8e-9a52-6f6f67656e32"  // READ|NOTIFY (v3)
 
 #define PROTO_VERSION 2
 
@@ -65,6 +68,12 @@ enum : uint8_t {
   CMD_SET_PASSKEY = 0x13,  // u32 passkey (platí po restartu)
   CMD_FACTORY     = 0x14,  // reset nastavení + smazání párování
   CMD_REBOOT      = 0x20,
+  // ---- v3 ----
+  CMD_TRIP_RESET   = 0x32,
+  CMD_CHARGE_MODE  = 0x40,  // u8 CHG_MODE_*
+  CMD_CHARGE_START = 0x41,  // jen v ručním režimu
+  CMD_CHARGE_STOP  = 0x42,
+  CMD_CHARGE_SET   = 0x43,  // u8 key, u16 value (CHGKEY_*)
 };
 enum : uint8_t { ARG_OFF = 0, ARG_ON = 1, ARG_TOGGLE = 2 };
 
@@ -87,3 +96,37 @@ enum : uint8_t {
   CFG_BLINK_PERIOD = 1, CFG_BLINK_AUTOOFF, CFG_BATT_CAL, CFG_BATT_LOW, CFG_BATT_CRIT,
   CFG_BRAKE_FLASH, CFG_TAIL_WITH_FRONT, CFG_LED_BRIGHT, CFG_LED_MODE, CFG_LIGHTS_ON_BOOT,
 };
+
+// =====================================================================
+//  v3 – telemetrie z řadiče KT (UART2, jen poslech) – TELEM, notify 20 B
+//  Pole, která firmware nezná, mají vyhrazenou hodnotu "není k dispozici":
+//   0  u8  version (3)
+//   1  u8  flags (TF_*)
+//   2  u16 rychlost [0,1 km/h]          TELEM_NA_U16 = není (kolo nenastaveno / řadič mlčí)
+//   4  i16 proud [0,1 A]                TELEM_NA_I16
+//   6  u16 napětí hlavní baterie [10mV] TELEM_NA_U16
+//   8  u8  hlavní baterie [%]           TELEM_NA_U8
+//   9  i8  teplota motoru [°C]          TELEM_NA_I8
+//  10  i8  teplota řadiče [°C]          TELEM_NA_I8
+//  11  u8  kód chyby
+//  12  u32 celkem ujeto [m]
+//  16  u32 trip [m]
+// =====================================================================
+#define TELEM_LEN 20
+#define TELEM_NA_U16 0xFFFF
+#define TELEM_NA_I16 0x7FFF
+#define TELEM_NA_U8  0xFF
+#define TELEM_NA_I8  (-128)
+enum : uint8_t { TF_MOVING = 1 << 0, TF_FAULT = 1 << 1, TF_BRAKE = 1 << 2, TF_CRUISE = 1 << 3, TF_LINK = 1 << 4 };
+
+// ---------------------------------------------------------------------
+//  v3 – dobíjení sekundární baterie – CHARGE, read/notify 12 B
+//   0 u8 version   1 u8 mode   2 u8 phase   3 u8 cíl [%]
+//   4 u8 proudová pojistka [0,1 A]   5 u8 flags (CF_HAS_SENSE)
+//   6 i16 proud [10 mA] (jen s CF_HAS_SENSE, jinak 0)   8 u16 doba [min]   10 u16 rezerva
+// ---------------------------------------------------------------------
+#define CHARGE_LEN 12
+enum : uint8_t { CHG_MODE_AUTO = 0, CHG_MODE_MANUAL = 1 };
+enum : uint8_t { CHG_IDLE = 0, CHG_CHARGING = 1, CHG_FULL = 2, CHG_PAUSED = 3, CHG_FAULT = 4 };
+enum : uint8_t { CHGKEY_TARGET = 1, CHGKEY_LIMIT_DECI_A = 2 };
+enum : uint8_t { CF_HAS_SENSE = 1 << 0 };

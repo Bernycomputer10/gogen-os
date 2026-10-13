@@ -5,7 +5,7 @@
 #include <Arduino.h>
 
 #define GOGEN_FW_MAJOR 2
-#define GOGEN_FW_MINOR 1
+#define GOGEN_FW_MINOR 2
 
 // ---------------------------------------------------------------------
 //  Režim vstupů: 1 = PCF8574 přes I2C, 0 = přímé GPIO
@@ -107,6 +107,35 @@
 #define BAT_R2_OHM       7500.0f   // 42 V → 2,47 V (lineární oblast ADC)
 #define BAT_CELLS      10
 #define BAT_SAMPLES    32
+
+// ---------------------------------------------------------------------
+//  Dobíjení sekundární baterie z druhé baterie (DC-DC / nabíječka)
+//  ESP32 pouze spíná MOSFET/relé (PIN_CHARGE). Proud a napětí ořezává HARDWARE
+//  měniče – musí být nastaven na max. 42,0 V (10S) a sekundární pack má mít BMS.
+//  GPIO5 je strapping pin: při resetu krátce plave/je HIGH → na gate patří 10k pulldown.
+// ---------------------------------------------------------------------
+#define PIN_CHARGE          5
+#define CHARGE_ACTIVE_HIGH  true
+#define CHARGE_MAX_CELL_V   4.15f    // tvrdý strop na článek (~95 %), bez ohledu na cíl
+#define CHARGE_MAX_MIN      240      // maximální doba jednoho nabíjení
+#define CHARGE_AUTO_START_PCT 20     // auto režim: start pod touto hodnotou
+#define CHARGE_BLE_LOSS_S   60       // ruční režim: ztráta BLE déle než X s → pozastavit
+// Volitelné měření nabíjecího proudu (ACS712 / zesílený bočník) na GPIO35 (ADC1, jen vstup)
+#define CHARGE_HAS_SENSE    0
+#define PIN_CHARGE_SENSE    35
+#define CHARGE_SENSE_ZERO_MV   1650.0f
+#define CHARGE_SENSE_MV_PER_A  100.0f
+
+// ---------------------------------------------------------------------
+//  Řadič KT-LCD3 – UART2, pouze POSLOUCHÁNÍ (TX se nepoužívá, ESP nic nevysílá)
+//  GPIO16 (RX2) → vodič TX řadiče (paralelně s displejem). 1200 baud 8N1.
+// ---------------------------------------------------------------------
+#define PIN_KT_RX           16
+#define KT_BAUD             1200
+#define KT_FRAME_LEN        12
+#define KT_FRAME_START      0x41
+#define KT_STALE_MS         1500     // bez rámce déle → telemetrie "není k dispozici"
+#define KT_MAX_PERIOD_MS    5000     // delší perioda otáčky = stojí
 
 // ---------------------------------------------------------------------
 //  BLE
