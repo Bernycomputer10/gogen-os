@@ -1,11 +1,11 @@
 #pragma once
 // =====================================================================
-//  GoGEN OS – konfigurace hardwaru (GoGEN V2, dokumentace rev 0.1)
+//  GoGEN OS – konfigurace hardwaru (GoGEN V2, ESP-WROOM-32)
 // =====================================================================
 #include <Arduino.h>
 
 #define GOGEN_FW_MAJOR 2
-#define GOGEN_FW_MINOR 0
+#define GOGEN_FW_MINOR 1
 
 // ---------------------------------------------------------------------
 //  Režim vstupů: 1 = PCF8574 přes I2C, 0 = přímé GPIO
@@ -18,36 +18,43 @@
 #define INPUT_MODE_PCF  1
 
 // =====================================================================
-//  PINOUT v2 (bez klaksonu)
+//  PINOUT v3 – ESP-WROOM-32 (ESP32 DevKit), bez klaksonu
 //
-//  ESP32-C3 Super Mini            funkce
+//  GPIO    typ               funkce      poznámka
 //  ------------------------------------------------------------------
-//  GPIO0   ADC1_CH0   BAT_SENSE   dělič baterie
-//  GPIO1              BRAKE_IN    brzdová páka → GND (interní pull-up)
-//  GPIO2   strapping  BTN_LIGHT   jen GPIO varianta, jinak volný
-//  GPIO3   PWM        LED         Q7 low-side – LED pásky
-//  GPIO4              FRONT       Q1 low-side – přední světlo
-//  GPIO5              TAIL        HS1 high-side – zadní TAIL
-//  GPIO6              BRAKE       HS2 high-side – zadní BRAKE
-//  GPIO7              LEFT        Q4 low-side – levé blinkry
-//  GPIO8   strapping  I2C SDA     OLED + PCF8574 (pull-up 4k7)
-//  GPIO9   strapping  I2C SCL     (BOOT tlačítko na desce)
-//  GPIO10             RIGHT       Q5 low-side – pravé blinkry
-//  GPIO18/19          USB         nechány volné → USB konzole a nahrávání vždy fungují
-//  GPIO20  UART RX    BTN_LEFT    jen GPIO varianta, jinak volný
-//  GPIO21  UART TX    BTN_RIGHT   jen GPIO varianta – 1k do série (ROM log při bootu)
+//  GPIO34  ADC1_CH6, jen IN  BAT_SENSE   dělič baterie (ADC2 nejde používat s BLE)
+//  GPIO13                    BRAKE_IN    brzdová páka → GND (interní pull-up)
+//  GPIO25  PWM               LED         Q7 low-side – LED pásky
+//  GPIO26                    FRONT       Q1 low-side – přední světlo
+//  GPIO27                    TAIL        HS1 high-side – zadní TAIL
+//  GPIO33                    BRAKE       HS2 high-side – zadní BRAKE
+//  GPIO32                    LEFT        Q4 low-side – levé blinkry
+//  GPIO23                    RIGHT       Q5 low-side – pravé blinkry
+//  GPIO21  I2C SDA           OLED + PCF8574 (pull-up 4k7)
+//  GPIO22  I2C SCL
+//  GPIO4                     BTN_LIGHT   jen GPIO varianta
+//  GPIO18                    BTN_LEFT    jen GPIO varianta
+//  GPIO19                    BTN_RIGHT   jen GPIO varianta
+//  GPIO14                    BTN_MODE    jen GPIO varianta (na WROOM-32 je pinů dost)
+//  GPIO1/3 UART0             konzole + nahrávání přes USB-UART převodník – nezapojovat
+//  GPIO16/17 UART2           rezerva: propojka na zadní jednotku / telemetrie KT
+//  GPIO35/36/39 jen IN       rezerva ADC1 (např. měření proudu)
+//
+//  NEPOUŽÍVAT: GPIO6–11 (interní SPI flash), GPIO12 (strapping – při bootu
+//  musí být LOW, jinak 1,8V flash), GPIO0/2/5/15 (strapping).
+//  Výstupy 23/25/26/27/32/33 po resetu plavou → na každém gate 10k pulldown.
 // =====================================================================
 
 // ---------------------------------------------------------------------
 //  Výstupy
 // ---------------------------------------------------------------------
-#define PIN_LED        3   // Q7  low-side PWM       – LED pásky
-#define PIN_FRONT      4   // Q1  low-side N-MOSFET  – přední světlo
-#define PIN_TAIL       5   // HS1 high-side          – zadní TAIL
-#define PIN_BRAKE      6   // HS2 high-side          – zadní BRAKE
-#define PIN_LEFT       7   // Q4  low-side           – levé blinkry
-#define PIN_RIGHT     10   // Q5  low-side           – pravé blinkry
-#define PIN_BAT_SENSE  0   // ADC1_CH0, dělič 120k / 8,2k (doporučeno 7,5k)
+#define PIN_LED       25   // Q7  low-side PWM       – LED pásky
+#define PIN_FRONT     26   // Q1  low-side N-MOSFET  – přední světlo
+#define PIN_TAIL      27   // HS1 high-side          – zadní TAIL
+#define PIN_BRAKE     33   // HS2 high-side          – zadní BRAKE
+#define PIN_LEFT      32   // Q4  low-side           – levé blinkry
+#define PIN_RIGHT     23   // Q5  low-side           – pravé blinkry
+#define PIN_BAT_SENSE 34   // ADC1_CH6, dělič 120k / 7,5k
 
 // Polarita výstupů (true = log. 1 zapíná). High-side moduly ověř!
 #define OUT_ACTIVE_HIGH true
@@ -58,11 +65,10 @@
 #define LED_PWM_BITS   8
 
 // ---------------------------------------------------------------------
-//  I2C sběrnice (OLED + PCF8574). GPIO8/9 jsou strapping piny, ale
-//  I2C s pull-upy je drží v log. 1 → bootování je v pořádku.
+//  I2C sběrnice (OLED + PCF8574) – výchozí piny ESP32
 // ---------------------------------------------------------------------
-#define PIN_I2C_SDA    8
-#define PIN_I2C_SCL    9
+#define PIN_I2C_SDA   21
+#define PIN_I2C_SCL   22
 #define I2C_FREQ       400000
 #define OLED_ADDR      0x3C
 #define PCF8574_ADDR   0x20
@@ -71,7 +77,7 @@
 //  Vstupy
 // ---------------------------------------------------------------------
 // Brzda je v obou variantách na přímém GPIO (rychlá odezva, není strapping)
-#define PIN_BRAKE_IN   1
+#define PIN_BRAKE_IN  13
 
 #if GOGEN_INPUT_MODE == INPUT_MODE_PCF
   // Piny PCF8574 (P0..P7), tlačítka spínají proti GND
@@ -82,13 +88,13 @@
   // P4..P7 volné
 #else
   // Přímé GPIO – tlačítko → GND, interní pull-up
-  #define PIN_BTN_LIGHT   2  // strapping – nedrž tlačítko při zapínání
-  #define PIN_BTN_LEFT   20
-  #define PIN_BTN_RIGHT  21  // UART TX – zapoj přes 1k rezistor
-  #define PIN_BTN_MODE   -1  // nezapojeno (LED se ovládají dlouhým stiskem Světla)
+  #define PIN_BTN_LIGHT   4
+  #define PIN_BTN_LEFT   18
+  #define PIN_BTN_RIGHT  19
+  #define PIN_BTN_MODE   14
 #endif
 
-// USB konzole je teď dostupná v obou variantách
+// Sériová konzole na UART0 (USB-UART převodník na desce) – v obou variantách
 #define GOGEN_CONSOLE  1
 
 // Brzdový spínač KT „Low-Level“: sepnuto = GND
@@ -98,7 +104,7 @@
 //  Měření baterie
 // ---------------------------------------------------------------------
 #define BAT_R1_OHM     120000.0f
-#define BAT_R2_OHM       8200.0f
+#define BAT_R2_OHM       7500.0f   // 42 V → 2,47 V (lineární oblast ADC)
 #define BAT_CELLS      10
 #define BAT_SAMPLES    32
 

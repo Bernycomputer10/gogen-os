@@ -1,6 +1,6 @@
 # GoGEN OS
 
-Firmware pro ESP32-C3 Super Mini (sekundární 36V okruh GoGEN V2) + Android aplikace přes BLE.
+Firmware pro ESP-WROOM-32 / ESP32 DevKit (sekundární 36V okruh GoGEN V2) + Android aplikace přes BLE.
 
 ```
 gogen-os/
@@ -14,36 +14,40 @@ gogen-os/
 
 ## Firmware
 
-### Pinout v2 (ESP32-C3 Super Mini, bez klaksonu)
+### Pinout v3 (ESP-WROOM-32, bez klaksonu)
 
 | GPIO | Funkce | Poznámka |
 |---|---|---|
-| 0 | BAT_SENSE | ADC1_CH0, dělič baterie |
-| 1 | BRAKE_IN | brzdová páka → GND, interní pull-up (obě varianty) |
-| 2 | BTN_LIGHT | jen varianta `gogen_gpio`, strapping – nedrž při zapínání |
-| 3 | LED pásky | Q7 low-side, PWM 5 kHz |
-| 4 | Přední světlo | Q1 low-side |
-| 5 | Zadní TAIL | HS1 high-side |
-| 6 | Zadní BRAKE | HS2 high-side |
-| 7 | Levé blinkry | Q4 low-side |
-| 8 / 9 | I2C SDA / SCL | OLED 0x3C + PCF8574 0x20 |
-| 10 | Pravé blinkry | Q5 low-side |
-| 18 / 19 | USB | volné – konzole i nahrávání fungují v obou variantách |
-| 20 | BTN_LEFT | jen `gogen_gpio` |
-| 21 | BTN_RIGHT | jen `gogen_gpio`, zapoj přes 1 kΩ (UART TX při bootu) |
+| 34 | BAT_SENSE | ADC1_CH6, jen vstup, dělič baterie |
+| 13 | BRAKE_IN | brzdová páka → GND, interní pull-up (obě varianty) |
+| 25 | LED pásky | Q7 low-side, PWM 5 kHz |
+| 26 | Přední světlo | Q1 low-side |
+| 27 | Zadní TAIL | HS1 high-side |
+| 33 | Zadní BRAKE | HS2 high-side |
+| 32 | Levé blinkry | Q4 low-side |
+| 23 | Pravé blinkry | Q5 low-side |
+| 21 / 22 | I2C SDA / SCL | OLED 0x3C + PCF8574 0x20 |
+| 4 / 18 / 19 / 14 | BTN Světla / L / P / Mód | jen varianta `gogen_gpio` |
+| 1 / 3 | UART0 | konzole a nahrávání přes USB-UART převodník – nezapojovat |
+| 16 / 17 | UART2 | rezerva: zadní jednotka / telemetrie KT |
+| 35 / 36 / 39 | ADC1, jen vstup | rezerva (např. měření proudu) |
 
-**Změny proti dokumentaci rev 0.1:** klakson (Q6, F8, GPIO3) je zrušený. LED pásky se přesunuly z GPIO1 na GPIO3. Brzda je na GPIO1 místo GPIO20/GPIO2. Tlačítka varianty GPIO jsou na 2/20/21 místo 20/21/18/19. Přední světlo, zadní světla a blinkry zůstaly na stejných pinech.
+**Nepoužívat:** GPIO6–11 (interní flash), GPIO12 (strapping, při startu musí být LOW, jinak modul nenabootuje), GPIO0/2/5/15 (strapping).
+
+**Změny proti pinoutu v2 (ESP32-C3):** všechny piny se přečíslovaly podle tabulky. Baterie musí být na ADC1 (GPIO32–39), protože ADC2 nejde používat současně s BLE. I2C je na výchozích pinech ESP32. Varianta `gogen_gpio` má nově i tlačítko Mód. Konzole jede přes UART0 a USB-UART převodník místo nativního USB.
 
 | Varianta | Vstupy |
 |---|---|
 | `gogen_pcf` (výchozí) | PCF8574 @0x20: P0 světla, P1 L, P2 P, P3 mód (P4–P7 volné) |
-| `gogen_gpio` | světla GPIO2, L GPIO20, P GPIO21 (bez tlačítka mód) |
+| `gogen_gpio` | světla GPIO4, L GPIO18, P GPIO19, mód GPIO14 |
 
 ```bash
 cd firmware
 pio run -e gogen_pcf -t upload
 pio device monitor        # příkazy: status, lights on, left, hazard, led 128, cal 41.8, pin 654321, help…
 ```
+
+Pokud se nahrávání zasekne na „Connecting…“, podrž na desce tlačítko BOOT.
 
 Nebo nahraj `gogen_pcf_factory.bin` z GitHub Actions na adresu `0x0` (např. přes ESP Web Flasher / `esptool.py write_flash 0x0 …`).
 
@@ -53,7 +57,7 @@ Nebo nahraj `gogen_pcf_factory.bin` z GitHub Actions na adresu `0x0` (např. př
 |---|---|---|
 | Světla | přední + zadní zap/vyp | LED pásky zap/vyp |
 | Levý / Pravý | blinkr (znovu = vyp, auto-vyp po 30 s) | výstražná světla |
-| Mód (jen PCF) | další režim LED | výstražná světla |
+| Mód | další režim LED | výstražná světla |
 | Brzda | brzdové světlo (3× probliknutí) | – |
 
 LED režimy: stálé, dýchání, stroboskop, „Brzda+“ (tlumené, při brzdě 100 %). Pod kritickým napětím (31 V) se LED pásky vypnou.
@@ -85,7 +89,8 @@ Služba `a8f30001-4c1e-4b8e-9a52-6f6f67656e32`
 
 ## ⚠️ Poznámky k hardwaru (ověř před prvním zapojením)
 
-1. **Dělič baterie:** 120k/8,2k dává při 42 V ≈ 2,69 V, ale ADC ESP32-C3 je přesný jen do ~2,5 V. Doporučuji **R2 = 7,5 kΩ** (42 V → 2,47 V) a v `config.h` změnit `BAT_R2_OHM` na `7500.0f`. Pak kalibruj multimetrem (`cal 41.8` nebo v aplikaci).
-2. **GPIO varianta:** tlačítko Světla je na GPIO2 (strapping) – nedrž ho při zapínání. Tlačítko P na GPIO21 zapoj přes 1 kΩ.
+1. **Dělič baterie:** firmware počítá s **120k / 7,5k** (42 V → 2,47 V, lineární oblast ADC ESP32). Pokud necháš 8,2 kΩ, změň v `config.h` `BAT_R2_OHM` na `8200.0f`. Mezi GPIO34 a GND dej 100 nF (ADC ESP32 je šumivé). Pak kalibruj multimetrem (`cal 41.8` nebo v aplikaci).
+2. **Výstupy po resetu plavou:** GPIO23/25/26/27/32/33 nemají při startu definovanou úroveň. Na gate každého MOSFETu / vstup high-side modulu patří 10 kΩ pulldown.
 3. **High-side moduly TAIL/BRAKE:** firmware předpokládá aktivní log. 1 (`OUT_ACTIVE_HIGH`). Ověř na konkrétním modulu.
 4. Na I2C sběrnici musí být pull-upy (většina OLED modulů je má osazené).
+5. **Napájení:** DevKit napájej 5 V na pin VIN/5V (z měniče), ne na 3V3. Modul při BLE vysílání bere špičky až ~250 mA.

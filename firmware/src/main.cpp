@@ -1,6 +1,6 @@
 // =====================================================================
 //  GoGEN OS – řídicí firmware sekundárního 36V okruhu GoGEN V2
-//  ESP32-C3 Super Mini · PlatformIO / Arduino · NimBLE
+//  ESP-WROOM-32 (ESP32 DevKit) · PlatformIO / Arduino · NimBLE
 // =====================================================================
 #include <Arduino.h>
 #include <Wire.h>
@@ -162,7 +162,7 @@ static void onButton(Button b, BtnEvent e) {
 }
 
 // ---------------------------------------------------------------------
-//  Sériová konzole přes USB CDC (GPIO18/19 jsou v obou variantách volné)
+//  Sériová konzole na UART0 (USB-UART převodník na desce)
 // ---------------------------------------------------------------------
 #if GOGEN_CONSOLE
 static char line[48];
