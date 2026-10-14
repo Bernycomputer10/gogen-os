@@ -8,6 +8,8 @@ namespace ble {
   void process();                               // vyzvedne příkazy z fronty (hlavní smyčka)
   void publishState(const uint8_t *buf, size_t len);
   void publishConfig(const uint8_t *buf, size_t len);
+  void publishTelemetry(const uint8_t *buf, size_t len);
+  void publishCharge(const uint8_t *buf, size_t len);
   bool connected();
   bool secured();
   void deleteBonds();
