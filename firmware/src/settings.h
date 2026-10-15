@@ -1,18 +1,16 @@
 #pragma once
 #include <Arduino.h>
+#include "protocol.h"
 
+// Všechna nastavení jsou u16 hodnoty indexované klíčem CFG_* (stejně jako v BLE).
 struct Settings {
-  uint16_t blinkPeriodMs   = 660;   // ~1,5 Hz
-  uint16_t blinkAutoOffS   = 30;    // 0 = nevypínat
-  uint16_t battCalPermille = 1000;  // korekce děliče (1000 = 1,000)
-  uint16_t battLow10mV     = 3300;  // 33,0 V (3,3 V/čl.)
-  uint16_t battCrit10mV    = 3100;  // 31,0 V – odlehčení zátěže
-  uint8_t  brakeFlash      = 1;     // 3× problikne při sešlápnutí
-  uint8_t  tailWithFront   = 1;     // zadní TAIL se zapíná s předním
-  uint8_t  ledBrightness   = 128;
-  uint8_t  ledMode         = 0;
-  uint8_t  lightsOnBoot    = 0;
-  uint32_t passkey         = 0;     // 0 = výchozí z config.h
+  uint16_t v[CFG_KEY_COUNT + 1];
+  uint32_t passkey;          // 0 = výchozí z config.h
+};
+
+struct KeyInfo {
+  const char *name;          // název pro konzoli
+  uint16_t def, min, max;
 };
 
 namespace settings {
@@ -20,7 +18,14 @@ namespace settings {
   void load();
   void save();
   void factoryReset();
-  // vrací false, pokud je klíč neznámý / hodnota mimo rozsah
+  // false = neznámý klíč / mimo rozsah / nekonzistentní s jiným klíčem
   bool setKey(uint8_t key, uint16_t value);
+  inline uint16_t get(uint8_t key) { return key <= CFG_KEY_COUNT ? cfg.v[key] : 0; }
+  const KeyInfo *info(uint8_t key);
+  int keyByName(const char *name);   // −1 = nenalezeno
   uint32_t passkey();
+
+  // ujeté km – samostatně, ať se při každé změně nepřepisuje celé nastavení
+  uint32_t loadOdometer();
+  void saveOdometer(uint32_t meters);
 }

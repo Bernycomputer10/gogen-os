@@ -34,7 +34,7 @@ export default function App() {
             </svg>
           </div>
           <h1>GoGEN V2</h1>
-          <p className="muted">Sekundární okruh · světla, blinkry, LED</p>
+          <p className="muted">Sekundární okruh · světla, nabíjení, přední pohon</p>
           <button className="primary" disabled={g.status === 'connecting'} onClick={g.scan}>
             {g.status === 'connecting' ? 'Připojuji…' : 'Hledat koloběžku'}
           </button>
@@ -56,9 +56,9 @@ export default function App() {
       {connected && g.state && (
         <>
           <main className="content">
-            {tab === 'dash' && <Dashboard s={g.state} send={g.send} />}
+            {tab === 'dash' && g.config && <Dashboard s={g.state} t={g.telem} cfg={g.config} send={g.send} />}
             {tab === 'cfg' && g.config && (
-              <Settings cfg={g.config} send={g.send} reload={g.reloadConfig} voltage={g.state.voltage} />
+              <Settings cfg={g.config} state={g.state} name={g.name} send={g.send} reload={g.reloadConfig} />
             )}
           </main>
           <nav className="tabs">

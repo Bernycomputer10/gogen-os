@@ -1,0 +1,74 @@
+name: Build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  firmware:
+    name: Firmware ESP32
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Testy logiky (PC)
+        run: |
+          cd firmware/tools/host_tests
+          g++ -std=c++17 -Wall -Wextra -Werror -I../../include test_logic.cpp -o test_logic
+          ./test_logic
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ hashFiles('firmware/platformio.ini') }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install platformio
+      - name: Build gogen_pcf + gogen_gpio
+        run: |
+          cd firmware
+          pio run -e gogen_pcf -e gogen_gpio
+          mkdir -p ../out
+          for e in gogen_pcf gogen_gpio; do
+            cp .pio/build/$e/firmware.bin ../out/${e}_firmware.bin
+            # jeden soubor pro nahrání na 0x0 (ESP Web Flasher / esptool write_flash 0x0)
+            python ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32 merge_bin \
+              -o ../out/${e}_factory.bin --flash_mode dio --flash_size 4MB \
+              0x1000 .pio/build/$e/bootloader.bin 0x8000 .pio/build/$e/partitions.bin \
+              0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
+              0x10000 .pio/build/$e/firmware.bin
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GoGEN-firmware
+          path: out/*.bin
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: android-app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Web build + Capacitor sync
+        run: |
+          cd android-app
+          npm ci
+          npm run cap:sync
+      - name: Gradle assembleDebug
+        run: |
+          cd android-app/android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GoGEN-apk
+          path: android-app/android/app/build/outputs/apk/debug/*.apk

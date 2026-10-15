@@ -15,7 +15,9 @@ struct BtnState {
 static BtnState st[BTN_COUNT];
 static ButtonHandler cb = nullptr;
 static bool pcfOk = true;
-static uint32_t pcfRetryAt = 0;
+[[maybe_unused]] static uint32_t pcfRetryAt = 0;
+static bool comboActive = false, comboFired = false;
+static uint32_t comboAt = 0;
 
 #if GOGEN_INPUT_MODE == INPUT_MODE_PCF
 static uint8_t pcfLast = 0xFF;
@@ -95,6 +97,18 @@ void poll(uint32_t now) {
       b.longFired = true;
       if (cb) cb((Button)i, BtnEvent::LongPress);
     }
+  }
+
+  // L + P současně: potlačí jejich běžné události a po COMBO_OFF_MS ohlásí Combo
+  if (st[BTN_LEFT].stable && st[BTN_RIGHT].stable) {
+    if (!comboActive) { comboActive = true; comboFired = false; comboAt = now; }
+    st[BTN_LEFT].longFired = st[BTN_RIGHT].longFired = true;
+    if (!comboFired && now - comboAt >= COMBO_OFF_MS) {
+      comboFired = true;
+      if (cb) cb(BTN_LEFT, BtnEvent::Combo);
+    }
+  } else if (!st[BTN_LEFT].stable && !st[BTN_RIGHT].stable) {
+    comboActive = false;
   }
 }
 

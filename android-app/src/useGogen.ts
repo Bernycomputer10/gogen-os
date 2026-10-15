@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Preferences } from '@capacitor/preferences';
 import { connectBle, connectDemo, pickDevice, type Link } from './ble/link';
-import type { GogenConfig, GogenState } from './ble/protocol';
+import type { GogenConfig, GogenState, GogenTelemetry } from './ble/protocol';
 
 export type ConnStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting';
 
@@ -10,6 +10,7 @@ const LAST_KEY = 'gogen.lastDevice';
 export function useGogen() {
   const [status, setStatus] = useState<ConnStatus>('idle');
   const [state, setState] = useState<GogenState | null>(null);
+  const [telem, setTelem] = useState<GogenTelemetry | null>(null);
   const [config, setConfig] = useState<GogenConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastDevice, setLastDevice] = useState<{ deviceId: string; name: string } | null>(null);
@@ -31,6 +32,7 @@ export function useGogen() {
     try {
       const l = await connectBle(dev.deviceId, dev.name, {
         onState: setState,
+        onTelemetry: setTelem,
         onDisconnect: () => {
           link.current = null;
           if (manualClose.current) { setStatus('idle'); return; }
@@ -66,7 +68,7 @@ export function useGogen() {
 
   const demo = useCallback(async () => {
     manualClose.current = false;
-    const l = connectDemo({ onState: setState, onDisconnect: () => setStatus('idle') });
+    const l = connectDemo({ onState: setState, onTelemetry: setTelem, onDisconnect: () => setStatus('idle') });
     link.current = l;
     setConfig(await l.readConfig());
     setStatus('connected');
@@ -79,6 +81,7 @@ export function useGogen() {
     link.current = null;
     setStatus('idle');
     setState(null);
+    setTelem(null);
     if (l) await l.disconnect().catch(() => undefined);
   }, []);
 
@@ -88,12 +91,15 @@ export function useGogen() {
     try { await l.send(bytes, fast); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   }, []);
 
-  const reloadConfig = useCallback(async () => {
-    if (link.current) setConfig(await link.current.readConfig());
+  const reloadConfig = useCallback(async (): Promise<GogenConfig | null> => {
+    if (!link.current) return null;
+    const c = await link.current.readConfig();
+    setConfig(c);
+    return c;
   }, []);
 
   return {
-    status, state, config, error, lastDevice, name: link.current?.name,
+    status, state, telem, config, error, lastDevice, name: link.current?.name,
     scan, open, demo, disconnect, send, reloadConfig, clearError: () => setError(null),
   };
 }

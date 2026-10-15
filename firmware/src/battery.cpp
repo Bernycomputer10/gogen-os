@@ -1,6 +1,7 @@
 #include "battery.h"
 #include "config.h"
 #include "settings.h"
+#include "protocol.h"
 
 namespace battery {
 
@@ -21,7 +22,7 @@ void begin() {
 }
 
 static float rawToVolts(uint16_t mv) {
-  return mv / 1000.0f * DIVIDER * settings::cfg.battCalPermille / 1000.0f;
+  return mv / 1000.0f * DIVIDER * settings::get(CFG_BATT_CAL) / 1000.0f;
 }
 
 void poll() {
@@ -34,6 +35,9 @@ void poll() {
 }
 
 float volts() { return vFilt; }
+
+// ADC u dorazu = přerušený dělič nebo zkrat → měření nelze věřit
+bool valid() { return primed && lastAdcMv > 150 && lastAdcMv < 3000; }
 uint16_t adcMilliVolts() { return lastAdcMv; }
 
 uint8_t percent() {
@@ -55,7 +59,7 @@ uint16_t calibrate(float realVolts) {
   float uncal = lastAdcMv / 1000.0f * DIVIDER;
   uint32_t cal = (uint32_t)(realVolts / uncal * 1000.0f + 0.5f);
   if (cal < 800 || cal > 1200) return 0;
-  settings::cfg.battCalPermille = cal;
+  settings::setKey(CFG_BATT_CAL, cal);
   vFilt = realVolts;
   return cal;
 }
