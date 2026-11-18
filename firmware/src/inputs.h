@@ -3,7 +3,8 @@
 
 enum Button : uint8_t { BTN_LIGHT = 0, BTN_LEFT, BTN_RIGHT, BTN_MODE, BTN_BRAKE, BTN_COUNT };
 
-enum class BtnEvent : uint8_t { None, Press, Release, Click, LongPress };
+// Combo = Levý + Pravý drženy současně COMBO_OFF_MS (hlásí se na BTN_LEFT)
+enum class BtnEvent : uint8_t { None, Press, Release, Click, LongPress, Combo };
 
 typedef void (*ButtonHandler)(Button b, BtnEvent e);
 

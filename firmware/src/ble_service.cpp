@@ -103,6 +103,12 @@ void publishState(const uint8_t *buf, size_t len) {
   if (server->getConnectedCount() > 0) chState->notify();
 }
 
+void publishTelemetry(const uint8_t *buf, size_t len) {
+  if (!chTelem) return;
+  chTelem->setValue(buf, len);
+  if (server->getConnectedCount() > 0) chTelem->notify();
+}
+
 void publishConfig(const uint8_t *buf, size_t len) {
   if (chCfg) chCfg->setValue(buf, len);
 }

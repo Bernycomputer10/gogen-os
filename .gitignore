@@ -1,0 +1,5 @@
+node_modules/
+android-app/dist/
+firmware/.pio/
+firmware/tools/host_tests/t
+firmware/tools/host_tests/test_logic

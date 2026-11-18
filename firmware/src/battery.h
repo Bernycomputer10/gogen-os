@@ -5,6 +5,7 @@ namespace battery {
   void begin();
   void poll();                 // volat každých BATTERY_POLL_MS
   float volts();               // filtrované napětí baterie [V]
+  bool valid();                // měření dává smysl (dělič zapojený)
   uint8_t percent();
   uint16_t adcMilliVolts();    // poslední průměr na pinu ADC
   // Nastaví kalibraci podle skutečně změřeného napětí (multimetr).
