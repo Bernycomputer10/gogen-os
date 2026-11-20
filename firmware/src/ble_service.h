@@ -9,6 +9,8 @@ namespace ble {
   void publishState(const uint8_t *buf, size_t len);
   void publishTelemetry(const uint8_t *buf, size_t len);
   void publishConfig(const uint8_t *buf, size_t len);
+  void publishTelemetry(const uint8_t *buf, size_t len);
+  void publishCharge(const uint8_t *buf, size_t len);
   bool connected();
   bool secured();
   void deleteBonds();

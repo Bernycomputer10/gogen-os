@@ -23,9 +23,10 @@
 #include "ota.h"
 #include "display.h"
 #include "ble_service.h"
+#include "charger.h"
+#include "ktlcd.h"
 
-static uint32_t tInput = 0, tSensor = 0, tDrive = 0, tBatt = 0, tDisp = 0;
-static uint32_t tNotify = 0, tLastNotify = 0, tTelem = 0;
+static uint32_t tInput = 0, tBatt = 0, tDisp = 0, tNotify = 0, tLastNotify = 0, tV3 = 0;
 static uint8_t lastState[STATE_LEN];
 static bool rebootPending = false, offPending = false;
 static uint32_t rebootAt = 0;
@@ -105,6 +106,33 @@ static void buildConfig(uint8_t *b) {
   for (int k = 1; k <= CFG_KEY_COUNT; k++) put16(b + 4 + 2 * (k - 1), settings::get(k));
   b[4 + 2 * CFG_KEY_COUNT] = (FEATURE_SPEED ? HW_SPEED : 0) | (FEATURE_DRIVE ? HW_DRIVE : 0) |
                              (FEATURE_CHARGE ? HW_CHARGE : 0) | (FEATURE_OTA ? HW_OTA : 0);
+}
+
+static void buildTelemetry(uint8_t *b, uint32_t now) {
+  memset(b, 0, TELEM_LEN);
+  b[0] = 3;
+  b[1] = (ktlcd::linkOk(now) ? TF_LINK : 0) | (ktlcd::speedKmh() > 0.5f && ktlcd::speedValid(now) ? TF_MOVING : 0) |
+         (vehicle::brakeInput() ? TF_BRAKE : 0);
+  put16(b + 2, ktlcd::speedValid(now) ? (uint16_t)(ktlcd::speedKmh() * 10.0f + 0.5f) : TELEM_NA_U16);
+  put16(b + 4, TELEM_NA_I16);        // proud, napětí a teploty zatím z řadiče nedekódujeme
+  put16(b + 6, TELEM_NA_U16);
+  b[8] = TELEM_NA_U8;
+  b[9] = (uint8_t)TELEM_NA_I8;
+  b[10] = (uint8_t)TELEM_NA_I8;
+  put32(b + 12, ktlcd::odoM());
+  put32(b + 16, ktlcd::tripM());
+}
+
+static void buildCharge(uint8_t *b) {
+  memset(b, 0, CHARGE_LEN);
+  b[0] = 3;
+  b[1] = charger::mode();
+  b[2] = charger::phase();
+  b[3] = charger::target();
+  b[4] = charger::limitDeciA();
+  b[5] = charger::hasSense() ? CF_HAS_SENSE : 0;
+  put16(b + 6, (uint16_t)charger::currentCentiA());
+  put16(b + 8, charger::elapsedMin());
 }
 
 static void refreshConfig() {
@@ -200,9 +228,11 @@ static void handleCommand(const uint8_t *d, size_t len) {
       rebootPending = true;
       rebootAt = millis() + 300;
       break;
-    case CMD_OTA:
-      if (a) startOta(); else ota::stop();
-      break;
+    case CMD_TRIP_RESET:    ktlcd::resetTrip(); break;
+    case CMD_CHARGE_MODE:   charger::setMode(a); break;
+    case CMD_CHARGE_START:  charger::start(); break;
+    case CMD_CHARGE_STOP:   charger::stop(); break;
+    case CMD_CHARGE_SET:    if (len >= 4) charger::setKey(d[1], get16(d + 2)); break;
   }
 }
 
@@ -330,6 +360,24 @@ static void consoleExec(char *s) {
   }
   else if (!strcmp(cmd, "mode") && arg) vehicle::setLedMode(atoi(arg));
   else if (!strcmp(cmd, "off")) vehicle::allOff();
+  else if (!strcmp(cmd, "kt")) ktlcd::printDebug(Serial, millis());
+  else if (!strcmp(cmd, "wheel") && arg) {
+    ktlcd::setWheelMm(atoi(arg));
+    Serial.printf("Obvod kola %u mm ulozen\n", ktlcd::wheelMm());
+  }
+  else if (!strcmp(cmd, "chg")) {
+    if (!arg || !strcmp(arg, "status"))
+      Serial.printf("Nabijeni: rezim %s, faze %u, vystup %s, cil %u %%, pojistka %.1f A, %u min, napeti %.2f V (%u %%)\n",
+                    charger::mode() == CHG_MODE_AUTO ? "auto" : "rucne", charger::phase(),
+                    charger::outputOn() ? "ZAP" : "vyp", charger::target(), charger::limitDeciA() / 10.0f,
+                    charger::elapsedMin(), battery::volts(), battery::percent());
+    else if (!strcmp(arg, "auto")) charger::setMode(CHG_MODE_AUTO);
+    else if (!strcmp(arg, "manual")) charger::setMode(CHG_MODE_MANUAL);
+    else if (!strcmp(arg, "start")) Serial.println(charger::start() ? "Nabijeni spusteno" : "Odmitnuto (rezim/cil/napeti)");
+    else if (!strcmp(arg, "stop")) charger::stop();
+    else if (!strcmp(arg, "target") && arg2) Serial.println(charger::setKey(CHGKEY_TARGET, atoi(arg2)) ? "OK" : "Neplatne");
+    else if (!strcmp(arg, "limit") && arg2) Serial.println(charger::setKey(CHGKEY_LIMIT_DECI_A, atoi(arg2)) ? "OK" : "Neplatne (5-50 = 0,5-5,0 A)");
+  }
   else if (!strcmp(cmd, "cal") && arg) {
     uint16_t c = battery::calibrate(atof(arg));
     if (c) { settings::save(); refreshConfig(); Serial.printf("Kalibrace %u ulozena\n", c); }
@@ -348,31 +396,9 @@ static void consoleExec(char *s) {
   }
   else if (!strcmp(cmd, "factory")) { d[0] = CMD_FACTORY; handleCommand(d, 1); }
   else if (!strcmp(cmd, "reboot")) ESP.restart();
-  else if (!strcmp(cmd, "poweroff")) offPending = true;
-  else if (!strcmp(cmd, "chg")) {
-    if (!arg) printStatus();
-    else if (!strcmp(arg, "auto")) charge::setMode(chg::Mode::AUTO);
-    else if (!strcmp(arg, "off")) charge::setMode(chg::Mode::OFF);
-    else if (!strcmp(arg, "force")) charge::setMode(chg::Mode::FORCE);
-    else if (!strcmp(arg, "reset")) charge::resetFault();
-    Serial.printf("Nabijeni: %s\n", CHG_ST[(int)charge::state()]);
-  }
-  else if (!strcmp(cmd, "drv")) {
-    if (!arg) printStatus();
-    else if (!strcmp(arg, "reset")) drive::resetFault();
-    else if (!strcmp(arg, "cal") && arg2) {
-      uint16_t mv = drive::calibrateThrottle(!strcmp(arg2, "max"));
-      if (mv) { refreshConfig(); Serial.printf("Plyn %s = %u mV (ulozit: save)\n", arg2, mv); }
-      else Serial.println("Kalibrace plynu selhala (pohon musi byt odpojeny)");
-    }
-    else if (!strcmp(arg, "dacinit"))
-      Serial.println(sensors::dacSetPowerOnZero() ? "MCP4725: vychozi 0 V ulozeno" : "MCP4725 neodpovida");
-    else { drive::setEnabled(onoff(arg)); if (!settings::get(CFG_DRV_ALLOWED)) Serial.println("Povol: set drv_allowed 1"); }
-    Serial.printf("Pohon: %s\n", DRV_ST[(int)drive::state()]);
-  }
-  else if (!strcmp(cmd, "trip")) { speed::resetTrip(); Serial.println("Vylet vynulovan"); }
-  else if (!strcmp(cmd, "ota")) { if (arg && !strcmp(arg, "off")) ota::stop(); else startOta(); }
-  else help();
+  else Serial.println("Prikazy: status | front/tail/lights [on|off] | left | right | hazard |"
+                      " led [on|off|0-255] | mode 0-3 | off | cal <V> | set <klic> <hodnota> | save |"
+                      " kt | wheel <mm> | chg [status|auto|manual|start|stop|target N|limit N] | pin <000000> | factory | reboot");
 }
 
 static void consolePoll() {
@@ -405,7 +431,8 @@ void setup() {
   display::begin();
   battery::begin();
   battery::poll();
-  speed::begin();
+  charger::begin();
+  ktlcd::begin();
   ble::begin(handleCommand);
   refreshConfig();
 
@@ -435,9 +462,9 @@ void loop() {
     charge::tick(now, drive::enabled() || drive::phaseClosed());
   }
 
-  vehicle::setAutoLight(sensors::autoLightLit());
-  vehicle::setAutoBrake(sensors::autoBrakeActive(), sensors::emergency());
+  ktlcd::poll(now);
   vehicle::tick(now);
+  charger::tick(now, battery::volts(), battery::percent(), ble::connected());
 
   ota::handle(now);
 
@@ -465,6 +492,15 @@ void loop() {
     uint8_t te[TELEM_LEN];
     buildTelemetry(te, now);
     ble::publishTelemetry(te, TELEM_LEN);
+  }
+
+  if (now - tV3 >= BLE_NOTIFY_MS) {
+    tV3 = now;
+    uint8_t t[TELEM_LEN], c[CHARGE_LEN];
+    buildTelemetry(t, now);
+    buildCharge(c);
+    ble::publishTelemetry(t, TELEM_LEN);
+    ble::publishCharge(c, CHARGE_LEN);
   }
 
   if (now - tDisp >= DISPLAY_REFRESH_MS) { tDisp = now; display::render(now, ble::connected()); }

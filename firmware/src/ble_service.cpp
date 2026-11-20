@@ -11,7 +11,8 @@ struct CmdMsg { uint8_t len; uint8_t data[16]; };
 static QueueHandle_t queue = nullptr;
 static CommandHandler handler = nullptr;
 static NimBLEServer *server = nullptr;
-static NimBLECharacteristic *chState = nullptr, *chCmd = nullptr, *chCfg = nullptr, *chTelem = nullptr;
+static NimBLECharacteristic *chState = nullptr, *chCmd = nullptr, *chCfg = nullptr;
+static NimBLECharacteristic *chTelem = nullptr, *chCharge = nullptr;
 static volatile bool isSecured = false;
 static char devName[20];
 
@@ -78,6 +79,7 @@ void begin(CommandHandler h) {
   chCmd = svc->createCharacteristic(GOGEN_CMD_UUID, writeP | NIMBLE_PROPERTY::WRITE_NR);
   chCfg = svc->createCharacteristic(GOGEN_CFG_UUID, readP);
   chTelem = svc->createCharacteristic(GOGEN_TELEM_UUID, readP | NIMBLE_PROPERTY::NOTIFY);
+  chCharge = svc->createCharacteristic(GOGEN_CHARGE_UUID, readP | NIMBLE_PROPERTY::NOTIFY);
   chCmd->setCallbacks(new CmdCB());
   svc->start();
 
@@ -109,6 +111,18 @@ void publishTelemetry(const uint8_t *buf, size_t len) {
 
 void publishConfig(const uint8_t *buf, size_t len) {
   if (chCfg) chCfg->setValue(buf, len);
+}
+
+void publishTelemetry(const uint8_t *buf, size_t len) {
+  if (!chTelem) return;
+  chTelem->setValue(buf, len);
+  if (server->getConnectedCount() > 0) chTelem->notify();
+}
+
+void publishCharge(const uint8_t *buf, size_t len) {
+  if (!chCharge) return;
+  chCharge->setValue(buf, len);
+  if (server->getConnectedCount() > 0) chCharge->notify();
 }
 
 bool connected() { return server && server->getConnectedCount() > 0; }
